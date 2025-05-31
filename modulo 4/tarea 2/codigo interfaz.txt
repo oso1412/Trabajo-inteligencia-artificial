@@ -1,0 +1,88 @@
+import tkinter as tk
+from tkinter import filedialog
+from PIL import Image, ImageTk
+import cv2
+import numpy as np
+import tensorflow as tf
+from keras.layers import TFSMLayer
+
+# Cargar modelo exportado desde Teachable Machine como SavedModel
+modelo = TFSMLayer("model.savedmodel", call_endpoint="serving_default")
+
+# Clases (ajusta según tu entrenamiento)
+clases = ['Enojado', 'Feliz', 'Triste']
+IMG_SIZE = 224  # Tamaño que espera el modelo
+
+
+def predecir_emocion(img_array):
+    img_array = cv2.resize(img_array, (IMG_SIZE, IMG_SIZE))
+    img_array = img_array.astype('float32') / 255.0
+    img_array = np.expand_dims(img_array, axis=0)
+
+    pred = modelo(img_array)
+
+    # ✅ Extraer el tensor del dict y convertirlo a numpy
+    pred_tensor = list(pred.values())[0]  # Obtener el primer (y probablemente único) valor del dict
+    pred_array = pred_tensor.numpy()
+
+    clase = clases[np.argmax(pred_array)]
+    return clase
+
+
+
+def seleccionar_imagen():
+    file_path = filedialog.askopenfilename()
+    if not file_path:
+        return
+    img = cv2.imread(file_path)
+    emocion = predecir_emocion(img)
+    mostrar_imagen(img, emocion)
+
+
+def capturar_webcam():
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        print("No se pudo acceder a la cámara.")
+        return
+
+    ret, frame = cap.read()
+    cap.release()
+
+    if ret:
+        emocion = predecir_emocion(frame)
+        mostrar_imagen(frame, emocion)
+    else:
+        print("Error al capturar imagen.")
+
+
+def mostrar_imagen(img_cv, emocion):
+    img_rgb = cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB)
+    img_pil = Image.fromarray(img_rgb)
+    img_pil = img_pil.resize((300, 300))
+    img_tk = ImageTk.PhotoImage(img_pil)
+
+    panel.config(image=img_tk)
+    panel.image = img_tk
+    etiqueta_emocion.config(text=f"Emoción detectada: {emocion}")
+
+
+# Interfaz
+ventana = tk.Tk()
+ventana.title("Detector de Emociones")
+
+frame_botones = tk.Frame(ventana)
+frame_botones.pack(pady=10)
+
+btn_seleccionar = tk.Button(frame_botones, text="📁 Elegir Imagen", command=seleccionar_imagen)
+btn_seleccionar.pack(side=tk.LEFT, padx=10)
+
+btn_camara = tk.Button(frame_botones, text="📷 Capturar con Webcam", command=capturar_webcam)
+btn_camara.pack(side=tk.LEFT, padx=10)
+
+panel = tk.Label(ventana)
+panel.pack()
+
+etiqueta_emocion = tk.Label(ventana, text="Emoción detectada: ", font=("Arial", 14))
+etiqueta_emocion.pack(pady=10)
+
+ventana.mainloop()
